@@ -1,0 +1,222 @@
+---
+title: "FinMetrics Homework 1"
+subtitle: "Exploring Time Series Analysis - Ticker F"
+author: "Lucia Sauer"
+date: "`r Sys.Date()`"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+    theme: "flatly"
+    highlight: "textmate"
+---
+
+Consider the series of log returns constructed from the adjusted price series of the F ticker over the entire sample.
+
+```{r}
+library(readr)
+df <- read.csv('F.csv')
+df$log.Adj <- log(df$Adj.Close)
+df$log.Adj.returns <- c(NA, diff(df$log.Adj))
+head(df)
+```
+
+### 1. Stationarity Analysis
+
+------------------------------------------------------------------------
+
+Carry out an ADF test to assess the evidence of nonstationarity.
+
+The hypotheses for the test are:
+
+$$
+H_0: \phi = 1 \quad \text{(The series has a unit root; non-stationary)}
+$$ 
+$$
+H_a: \phi < 1 \quad \text{(The series is stationary)}
+$$
+
+```{r echo=TRUE, warning=FALSE, paged.print=TRUE}
+#install.packages("tseries")
+library(tseries)
+#ADF test
+log_return_ts <- ts(na.omit(df$log.Adj.returns))
+resultado_adf <- adf.test(log_return_ts)
+print(resultado_adf)
+```
+
+Based on the results of the test, we can reject H0 because the p-value is smaller than $5\%$, hence the series is stationarity.
+
+### 2. Moments of the Time Series
+
+------------------------------------------------------------------------
+
+```{r}
+#install.packages("kableExtra")
+library(tibble)
+library(kableExtra)
+library(moments)
+results <- tibble::tibble(
+  Statistic = c("Mean", "Variance", "Skewness", "Kurtosis"),
+  Value = c(
+    round(mean(log_return_ts),3),
+    round(var(log_return_ts),3),
+    round(skewness(log_return_ts),3),
+    round(kurtosis(log_return_ts),3)
+  )
+)
+results %>%
+  kable(caption = "Summary Statistics for Log Returns") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+#### 2.1 Inspection of skewness
+
+The third and fourth central moments provide information on the shape of the distribution. The skewness is an index of asymmetry of the distribution and looking at the results in the previous table we can say that the series is little positively skewed, which means that the right tail is longer than the left one.
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+
+ggplot(data.frame(log_return_ts), aes(x = log_return_ts)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "purple", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Log Returns",
+       x = "Log Returns Adjusted", 
+       y = "Density") +
+  theme_minimal()
+```
+
+Kernel Density Estimation provides an alternative way to estimate the density of return. The Kernel Density Estimator is a smooth version of the histogram.
+
+```{r message=FALSE, warning=FALSE}
+ggplot(data.frame(log_return_ts), aes(x = log_return_ts)) +
+  geom_density(fill = "purple", color = "black", alpha = 0.7) +
+  labs(title = "Kernel Density Plot of Log Returns",
+       x = "Log Returns Adjusted", 
+       y = "Density") +
+  theme_minimal()
+
+```
+
+#### 2.2 Inspection of kurtosis
+
+Kurtosis is an index of tail thickness of the distribution. The kernel and histogram estimators have a visual limitation: It is hard to detect what’s going on the tails of the distribution.
+
+Looking at the results of the previous table, the kurtosis is greater than 3, hence the distribution has fatter tails.
+
+The QQPlot (Quantile Quantile Plot) allows us to better appreciate how much the tails of a distribution deviate from a Normal (or any other random variable)
+
+```{r}
+qqnorm(log_return_ts, main = "Q-Q Plot of Log Returns Adjusted")
+qqline(log_return_ts, col = "purple")
+```
+
+### 3. Extremes
+
+------------------------------------------------------------------------
+
+What are the max and min of the series?
+
+```{r}
+print(round(max(log_return_ts),3))
+print(round(min(log_return_ts),3))
+
+```
+
+What is the percentage of days with a return larger than $5\%$ in absolute value?
+
+```{r}
+total_days <- nrow(df) - 1
+days_large_returns <- nrow(df[abs(df$log.Adj.returns) > 0.05, ])
+print(round((days_large_returns / total_days) * 100, 3))
+```
+
+### 4. Return Distribution
+
+------------------------------------------------------------------------
+
+Carry out a Jarque Bera test to assess the evidence of normality.
+
+```{r}
+jarque_bera_result <- jarque.bera.test(log_return_ts)
+print(jarque_bera_result)
+cat("Jarque-Bera Test Statistic: ",  round(jarque_bera_result$statistic, 3), "\n")
+cat("p-value: ", round(jarque_bera_result$p.value, 3), "\n")
+```
+
+### 5. Annualized Volatility
+
+------------------------------------------------------------------------
+
+-   Over the full sample
+
+```{r}
+print(round(sqrt(252*var(log_return_ts)),3))
+```
+
+-   In 2012
+
+```{r}
+df$Date <- as.Date(df$Date)
+log_returns_2012 <- df[format(df$Date, "%Y") == "2012", ,drop = FALSE]
+variance_2012 <- var(log_returns_2012$log.Adj.returns, na.rm = TRUE)
+annualized_volatility_2012 <- round(sqrt(252 * variance_2012), 3)
+print(annualized_volatility_2012)
+```
+
+-   In 2015
+
+```{r}
+df$Date <- as.Date(df$Date)
+log_returns_2015 <- df[format(df$Date, "%Y") == "2015", , drop = FALSE]
+variance_2015 <- var(log_returns_2015$log.Adj.returns, na.rm = TRUE)
+annualized_volatility_2015 <- round(sqrt(252 * variance_2015), 3)
+print(annualized_volatility_2015)
+```
+
+-   In 2020
+
+```{r}
+df$Date <- as.Date(df$Date)
+log_returns_2020 <- df[format(df$Date, "%Y") == "2020", , drop = FALSE]  # drop = FALSE mantiene el dataframe
+variance_2020 <- var(log_returns_2020$log.Adj.returns, na.rm = TRUE)
+annualized_volatility_2020 <- round(sqrt(252 * variance_2020), 3)
+print(annualized_volatility_2020)
+```
+
+### 6. Returns Dynamics
+
+------------------------------------------------------------------------
+
+Compute the sample autocorrelation function from lag 1 to 126
+
+```{r}
+acf_result <- acf(log_return_ts, lag.max = 126, plot = TRUE, col = "purple")
+
+```
+
+6.1. What are the values of the sample autocorrelation function from 1 to 5?
+
+```{r}
+acf_values <- round(acf_result$acf[2:6],3)  # Extract values for lags 1 to 5
+print(acf_values)
+```
+
+6.2. What is the number of autocorrelations outside the zero confidence bands?
+
+```{r}
+acf_values <- acf_result$acf[-1]
+n <- length(log_return_ts)
+conf_interval <- 1.96 / sqrt(n)
+autocorr_outside <- sum(abs(acf_values) > conf_interval)
+print(autocorr_outside)
+
+```
+
+6.3. What is the number of autocorrelations larger than 0.05 in absolute value?
+
+```{r}
+autocorr_above_005 <- sum(abs(acf_values) > 0.05)
+print(autocorr_above_005)
+
+```
